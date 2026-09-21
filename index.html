@@ -90,6 +90,7 @@
       padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
       container-type: inline-size;
       container-name: widget;
+      position: relative; /* Needed to anchor the gear icon */
     }
 
     /* Main Container */
@@ -173,48 +174,49 @@
     }
 
     /* ==========================================================================
-       CUSTOMIZE BUTTON (Pill-shaped, minimal, below the bars)
+       GEAR TRIGGER ICON
+       Hidden by default (opacity:0), smoothly revealed when hovering
+       over the whole .widget-viewport. Anchored at bottom-right.
        ========================================================================== */
-    .customize-action {
-      display: flex;
-      justify-content: center;
-      width: 100%;
-      margin-top: 4px;
-    }
-
-    .customize-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 6px 16px;
-      font-family: inherit;
-      font-size: 12.5px;
-      font-weight: 500;
-      color: var(--text-color);
-      background-color: transparent;
-      border: 1px solid var(--border-color);
-      border-radius: 9999px; /* Pill-shaped */
+    .gear-trigger {
+      position: absolute;
+      bottom: 10px;
+      right: 14px;
+      width: 30px;
+      height: 30px;
+      background: none;
+      border: none;
       cursor: pointer;
-      opacity: 0.65;
-      transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
-      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 5px;
+      border-radius: 50%;
+      color: var(--text-color);
+      opacity: 0;                          /* Hidden by default */
+      transition: opacity 0.3s ease, transform 0.25s ease, background-color 0.2s ease;
     }
 
-    .customize-btn:hover,
-    .customize-btn:focus-visible {
-      opacity: 1;
-      background-color: rgba(201, 138, 153, 0.12);
+    /* Reveal smoothly on widget hover */
+    .widget-viewport:hover .gear-trigger {
+      opacity: 0.7;
+    }
+
+    .gear-trigger:hover,
+    .gear-trigger:focus-visible {
+      opacity: 1 !important;
+      background-color: rgba(201, 138, 153, 0.14);
+      transform: rotate(32deg);
       outline: none;
-      transform: translateY(-1px);
     }
 
-    .customize-btn:active {
-      transform: translateY(0);
+    .gear-trigger:active {
+      transform: rotate(32deg) scale(0.92);
     }
 
-    .customize-btn svg {
-      width: 13px;
-      height: 13px;
+    .gear-trigger svg {
+      width: 15px;
+      height: 15px;
       stroke: currentColor;
       fill: none;
       stroke-width: 2;
@@ -589,6 +591,47 @@
       background-color: rgba(209, 77, 104, 0.08);
     }
 
+    /* Copy Link button */
+    .btn-copy-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: none;
+      border: 1px solid var(--panel-border);
+      color: var(--panel-text);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 6px 11px;
+      border-radius: 6px;
+      transition: all 0.18s ease;
+      white-space: nowrap;
+    }
+
+    .btn-copy-link:hover {
+      background-color: rgba(201, 138, 153, 0.1);
+      border-color: var(--bar-color);
+      color: var(--bar-color);
+    }
+
+    .btn-copy-link.copied {
+      color: #3aa76d;
+      border-color: #3aa76d;
+      background-color: rgba(58, 167, 109, 0.08);
+    }
+
+    .btn-copy-link svg {
+      width: 12px;
+      height: 12px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex-shrink: 0;
+    }
+
     .btn-done {
       background-color: var(--bar-color);
       color: #ffffff;
@@ -708,18 +751,16 @@
         All progress bars are hidden. Click Customize below to enable bars.
       </div>
 
-      <!-- Pill-shaped Customize Button -->
-      <div class="customize-action">
-        <button class="customize-btn" id="openSettingsBtn" aria-label="Customize progress bar widget">
-          <svg viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-          </svg>
-          Customize
-        </button>
-      </div>
-
     </main>
+
+    <!-- Hidden Gear Icon Trigger (opacity:0, reveals smoothly on widget hover) -->
+    <button class="gear-trigger" id="openSettingsBtn" aria-label="Customize widget settings" title="Customize">
+      <svg viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+    </button>
+
   </div>
 
   <!-- Settings Modal (Desktop Centered / Mobile Bottom Sheet) -->
@@ -892,6 +933,11 @@
       <!-- Modal Footer -->
       <div class="modal-footer">
         <button type="button" class="btn-reset" id="resetDefaultsBtn">Reset to defaults</button>
+        <!-- Copy Link: builds shareable URL with all settings as query params -->
+        <button type="button" class="btn-copy-link" id="copyLinkBtn">
+          <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          Copy Link
+        </button>
         <button type="button" class="btn-done" id="doneSettingsBtn">Done</button>
       </div>
 
@@ -942,7 +988,6 @@
       // --- DOM Elements ---
       const root = document.documentElement;
       const body = document.body;
-      const progressList = document.getElementById('progressList');
       const emptyNotice = document.getElementById('emptyNotice');
 
       const rows = {
@@ -983,6 +1028,7 @@
       const closeSettingsBtn = document.getElementById('closeSettingsBtn');
       const doneSettingsBtn = document.getElementById('doneSettingsBtn');
       const resetDefaultsBtn = document.getElementById('resetDefaultsBtn');
+      const copyLinkBtn = document.getElementById('copyLinkBtn');
 
       // Inputs
       const birthdayInput = document.getElementById('birthdayInput');
@@ -1024,12 +1070,12 @@
 
       // --- Safe LocalStorage Operations ---
       function safeLoad() {
+        // 1. Load from localStorage first (base layer)
         try {
           const raw = localStorage.getItem(STORAGE_KEY);
           if (raw) {
             const parsed = JSON.parse(raw);
             state = Object.assign({}, DEFAULT_SETTINGS, parsed);
-            // Deep merge nested objects
             state.bars = Object.assign({}, DEFAULT_SETTINGS.bars, parsed.bars || {});
             state.colorsLight = Object.assign({}, DEFAULT_SETTINGS.colorsLight, parsed.colorsLight || {});
             state.colorsDark = Object.assign({}, DEFAULT_SETTINGS.colorsDark, parsed.colorsDark || {});
@@ -1038,23 +1084,106 @@
           console.warn('LocalStorage load failed or blocked by iframe:', e);
         }
 
-        // Support URL parameters overrides for seamless Notion embeds
+        // 2. URL parameters override localStorage (highest priority for Notion embeds)
         try {
           const params = new URLSearchParams(window.location.search);
+
+          // Birthday & lifespan
           if (params.has('dob') && isValidDateString(params.get('dob'))) {
             state.birthday = params.get('dob');
           }
-          if (params.has('lifespan') && !isNaN(Number(params.get('lifespan')))) {
-            state.lifespan = Math.max(1, Math.min(150, Number(params.get('lifespan'))));
+          const lsRaw = params.get('ls') || params.get('lifespan');
+          if (lsRaw && !isNaN(Number(lsRaw)) && Number(lsRaw) > 0) {
+            state.lifespan = Math.min(150, Math.round(Number(lsRaw)));
           }
+
+          // Dark mode
           if (params.has('dark')) {
             state.darkMode = params.get('dark') === '1' || params.get('dark') === 'true';
           }
-          if (params.has('firstday') && (params.get('firstday') === 'sunday' || params.get('firstday') === 'monday')) {
-            state.firstDayOfWeek = params.get('firstday');
+
+          // First day of week
+          const fdRaw = params.get('fd') || params.get('firstday');
+          if (fdRaw) {
+            if (fdRaw === 'sun' || fdRaw === 'sunday') state.firstDayOfWeek = 'sunday';
+            else if (fdRaw === 'mon' || fdRaw === 'monday') state.firstDayOfWeek = 'monday';
           }
+
+          // Visible bars (comma-separated list, e.g. "year,month,day")
+          if (params.has('bars')) {
+            const barNames = params.get('bars').split(',').map(s => s.trim()).filter(Boolean);
+            if (barNames.length > 0) {
+              ['year', 'month', 'week', 'day', 'life'].forEach(b => {
+                state.bars[b] = barNames.includes(b);
+              });
+            }
+          }
+
+          // Light mode colors
+          if (params.has('lbg'))  state.colorsLight.bg     = params.get('lbg');
+          if (params.has('lbar')) state.colorsLight.bar    = params.get('lbar');
+          if (params.has('lbrd')) state.colorsLight.border = params.get('lbrd');
+          if (params.has('ltxt')) state.colorsLight.text   = params.get('ltxt');
+
+          // Dark mode colors
+          if (params.has('dbg'))  state.colorsDark.bg     = params.get('dbg');
+          if (params.has('dbar')) state.colorsDark.bar    = params.get('dbar');
+          if (params.has('dbrd')) state.colorsDark.border = params.get('dbrd');
+          if (params.has('dtxt')) state.colorsDark.text   = params.get('dtxt');
+
         } catch (e) {
-          // Ignore URLSearchParams error
+          // Ignore URLSearchParams error (sandboxed iframes)
+        }
+      }
+
+      /**
+       * Build a shareable URL encoding ALL current settings as query parameters.
+       * Works even inside a sandboxed Notion iframe by constructing the URL
+       * from current origin/pathname rather than relying on location.href.
+       */
+      function buildShareURL() {
+        try {
+          const params = new URLSearchParams();
+
+          params.set('dob', state.birthday);
+          params.set('ls', state.lifespan);
+          if (state.darkMode) params.set('dark', '1');
+          if (state.firstDayOfWeek !== 'monday') params.set('fd', 'sun');
+
+          // Bars: only encode if any are hidden (skip param if all 5 visible)
+          const visibleBars = Object.entries(state.bars).filter(([, v]) => v).map(([k]) => k);
+          if (visibleBars.length < 5) {
+            params.set('bars', visibleBars.join(','));
+          }
+
+          // Colors: only include if changed from defaults
+          const DL = DEFAULT_SETTINGS.colorsLight;
+          const DD = DEFAULT_SETTINGS.colorsDark;
+          if (state.colorsLight.bg     !== DL.bg)     params.set('lbg',  state.colorsLight.bg);
+          if (state.colorsLight.bar    !== DL.bar)    params.set('lbar', state.colorsLight.bar);
+          if (state.colorsLight.border !== DL.border) params.set('lbrd', state.colorsLight.border);
+          if (state.colorsLight.text   !== DL.text)   params.set('ltxt', state.colorsLight.text);
+          if (state.colorsDark.bg      !== DD.bg)     params.set('dbg',  state.colorsDark.bg);
+          if (state.colorsDark.bar     !== DD.bar)    params.set('dbar', state.colorsDark.bar);
+          if (state.colorsDark.border  !== DD.border) params.set('dbrd', state.colorsDark.border);
+          if (state.colorsDark.text    !== DD.text)   params.set('dtxt', state.colorsDark.text);
+
+          const qs = params.toString();
+          return window.location.origin + window.location.pathname + (qs ? '?' + qs : '');
+        } catch (e) {
+          return window.location.href;
+        }
+      }
+
+      /**
+       * Sync all current settings to the browser URL (no page reload).
+       * Silently fails in sandboxed iframes where history API is blocked.
+       */
+      function updateURLParams() {
+        try {
+          history.replaceState(null, '', buildShareURL());
+        } catch (e) {
+          // Sandboxed iframe — URL update blocked, that's OK
         }
       }
 
@@ -1064,6 +1193,7 @@
         } catch (e) {
           console.warn('LocalStorage save failed:', e);
         }
+        updateURLParams(); // Keep URL in sync with every settings change
       }
 
       function isValidDateString(str) {
@@ -1361,12 +1491,50 @@
       // 7. Reset to defaults
       resetDefaultsBtn.addEventListener('click', function () {
         state = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
-        safeSave();
+        safeSave(); // also calls updateURLParams
         syncSettingsUI();
         applyTheme();
         applyBarVisibility();
         updateAllProgress();
       });
+
+      // 8. Copy Link — builds shareable URL from current state and copies to clipboard
+      copyLinkBtn.addEventListener('click', function () {
+        const url = buildShareURL();
+
+        function showCopied() {
+          copyLinkBtn.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg> Copied!';
+          copyLinkBtn.classList.add('copied');
+          setTimeout(function () {
+            copyLinkBtn.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg> Copy Link';
+            copyLinkBtn.classList.remove('copied');
+          }, 2200);
+        }
+
+        // Modern clipboard API with fallback for older browsers / sandboxed iframes
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(url).then(showCopied).catch(function () {
+            fallbackCopy(url);
+            showCopied();
+          });
+        } else {
+          fallbackCopy(url);
+          showCopied();
+        }
+      });
+
+      function fallbackCopy(text) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch (e) {}
+      }
 
       // Open / Close modal events
       openSettingsBtn.addEventListener('click', openModal);
