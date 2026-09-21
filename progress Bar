@@ -1,1 +1,878 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Progress</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --bar: #c98a99;
+    --border: #c98a99;
+    --text: #c98a99;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    transition: background-color .25s ease, color .25s ease;
+    overflow: hidden;
+  }
+
+  /* Container-query context so the widget scales to the Notion embed box,
+     not the browser viewport. */
+  .page {
+    container-type: inline-size;
+    container-name: widget-page;
+    min-height: 100%;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(10px, 4cqw, 28px) clamp(8px, 4cqw, 16px);
+    overflow: hidden;
+  }
+
+  .widget-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 460px;
+  }
+
+  .widget {
+    width: 100%;
+    padding-bottom: clamp(30px, 9cqw, 46px); /* room for the gear icon */
+  }
+
+  .bars {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(9px, 3.6cqw, 16px);
+  }
+
+  .bar-row {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 3cqw, 14px);
+    min-width: 0;
+  }
+
+  .bar-track {
+    flex: 1;
+    min-width: 0;
+    height: clamp(32px, 11.5cqw, 52px);
+    border-radius: clamp(16px, 5.8cqw, 26px);
+    border: max(1.5px, 0.5cqw) solid var(--border);
+    background: var(--bg);
+    padding: clamp(3px, 1cqw, 5px);
+    display: flex;
+    align-items: stretch;
+    overflow: hidden;
+    transition: border-color .25s ease, background-color .25s ease;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--bar);
+    min-width: 10px;
+    transition: width .4s ease, background-color .25s ease;
+  }
+
+  .bar-label {
+    flex-shrink: 0;
+    font-size: clamp(10.5px, 3.6cqw, 16px);
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    min-width: clamp(54px, 19cqw, 88px);
+    transition: color .25s ease;
+  }
+
+  .empty-state {
+    font-size: clamp(11px, 3.4cqw, 14px);
+    color: var(--text);
+    opacity: .6;
+    text-align: center;
+    padding: clamp(14px, 5cqw, 24px) 8px;
+  }
+
+  /* ---------- Hover-only settings gear ---------- */
+  .gear-btn {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: clamp(28px, 8cqw, 36px);
+    height: clamp(28px, 8cqw, 36px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(14px, 4.4cqw, 18px);
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    opacity: 0;
+    transform: scale(0.92);
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  .widget-wrapper:hover .gear-btn,
+  .widget-wrapper:focus-within .gear-btn,
+  .gear-btn:focus-visible {
+    opacity: 1;
+    transform: scale(1);
+  }
+  /* Touch devices can't hover — keep the gear faintly visible so it's reachable */
+  @media (hover: none) {
+    .gear-btn { opacity: 0.55; }
+  }
+  .gear-btn:active { transform: scale(0.92); }
+
+  /* ---------- Settings overlay ---------- */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(20, 12, 15, 0.35);
+    display: none;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 1000;
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .overlay.open { display: flex; }
+
+  .panel {
+    width: 100%;
+    max-width: 460px;
+    max-height: 88vh;
+    background: #fffdfd;
+    color: #4a3339;
+    border-radius: 22px 22px 0 0;
+    padding: 20px 22px calc(24px + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.15);
+    animation: slideUp .22s ease;
+  }
+  @media (min-width: 560px) {
+    .overlay { align-items: center; }
+    .panel { border-radius: 22px; max-height: 84vh; }
+  }
+  @keyframes slideUp {
+    from { transform: translateY(24px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .panel-header h2 {
+    font-size: 18px;
+    margin: 0;
+    font-weight: 600;
+  }
+  .close-btn {
+    border: none;
+    background: #f4e9ec;
+    color: #a56777;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    font-size: 17px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .settings-section {
+    padding: 16px 0;
+    border-bottom: 1px solid #f0e2e5;
+  }
+  .settings-section:last-of-type { border-bottom: none; }
+  .settings-section h3 {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #a56777;
+    margin: 0 0 12px;
+  }
+
+  .field-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 0;
+    font-size: 14.5px;
+  }
+  .field-row + .field-row { margin-top: 2px; }
+
+  .field-row input[type="date"],
+  .field-row input[type="number"] {
+    font-family: inherit;
+    font-size: 14.5px;
+    border: 1px solid #e6cdd3;
+    border-radius: 10px;
+    padding: 7px 10px;
+    color: #4a3339;
+    background: #fff;
+    width: 150px;
+  }
+
+  .toggle-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid #e6cdd3;
+    background: #fff;
+    font-size: 13.5px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .chip input { accent-color: #c98a99; margin: 0; }
+  .chip.active { background: #faeef0; border-color: #c98a99; }
+
+  .segmented {
+    display: flex;
+    background: #f4e9ec;
+    border-radius: 999px;
+    padding: 3px;
+    gap: 3px;
+  }
+  .segmented label {
+    flex: 1;
+    text-align: center;
+    font-size: 13.5px;
+    padding: 7px 0;
+    border-radius: 999px;
+    cursor: pointer;
+    color: #a56777;
+  }
+  .segmented input { display: none; }
+  .segmented label.active {
+    background: #ffffff;
+    color: #4a3339;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  .switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .switch {
+    position: relative;
+    width: 42px;
+    height: 25px;
+    flex-shrink: 0;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .track {
+    position: absolute;
+    inset: 0;
+    background: #e6cdd3;
+    border-radius: 999px;
+    transition: background .15s ease;
+  }
+  .switch .knob {
+    position: absolute;
+    top: 3px; left: 3px;
+    width: 19px; height: 19px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform .15s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  }
+  .switch input:checked + .track { background: #c98a99; }
+  .switch input:checked + .track .knob { transform: translateX(17px); }
+
+  .color-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .color-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #fff;
+    border: 1px solid #f0e2e5;
+    border-radius: 12px;
+    padding: 8px 10px;
+    font-size: 12.5px;
+    color: #4a3339;
+  }
+  .color-field input[type="color"] {
+    width: 30px;
+    height: 30px;
+    border: none;
+    padding: 0;
+    background: none;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .reset-btn, .link-row button {
+    margin-top: 6px;
+    width: 100%;
+    background: none;
+    border: 1px solid #e6cdd3;
+    color: #a56777;
+    font-family: inherit;
+    font-size: 13.5px;
+    padding: 10px;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+
+  .link-row {
+    display: flex;
+    gap: 8px;
+  }
+  .link-row input {
+    flex: 1;
+    min-width: 0;
+    font-family: inherit;
+    font-size: 12.5px;
+    border: 1px solid #e6cdd3;
+    border-radius: 10px;
+    padding: 8px 10px;
+    color: #7a5760;
+    background: #fbf3f5;
+  }
+  .link-row button {
+    margin-top: 0;
+    width: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 8px 14px;
+  }
+  .link-row button.copied {
+    background: #c98a99;
+    border-color: #c98a99;
+    color: #fff;
+  }
+
+  /* Dark mode for the settings panel itself, following widget theme */
+  body[data-panel-dark="true"] .panel { background: #241a1d; color: #efdfe2; }
+  body[data-panel-dark="true"] .settings-section { border-color: #3a2c30; }
+  body[data-panel-dark="true"] .settings-section h3 { color: #d9a6b3; }
+  body[data-panel-dark="true"] .close-btn { background: #3a2c30; color: #d9a6b3; }
+  body[data-panel-dark="true"] .field-row input,
+  body[data-panel-dark="true"] .color-field,
+  body[data-panel-dark="true"] .chip,
+  body[data-panel-dark="true"] .segmented,
+  body[data-panel-dark="true"] .link-row input { background: #2e2226; border-color: #4a383d; color: #efdfe2; }
+  body[data-panel-dark="true"] .chip.active { background: #3d2c31; border-color: #d9a6b3; }
+  body[data-panel-dark="true"] .segmented { background: #1c1416; }
+  body[data-panel-dark="true"] .segmented label { color: #d9a6b3; }
+  body[data-panel-dark="true"] .segmented label.active { background: #3a2c30; color: #efdfe2; }
+  body[data-panel-dark="true"] .reset-btn,
+  body[data-panel-dark="true"] .link-row button { border-color: #4a383d; color: #d9a6b3; }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="widget-wrapper" tabindex="-1">
+    <div class="widget">
+      <div class="bars" id="barsContainer"></div>
+    </div>
+    <button class="gear-btn" id="customizeBtn" type="button" aria-label="Customize widget" title="Customize">⚙️</button>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>Customize</h2>
+      <button class="close-btn" id="closeBtn" type="button" aria-label="Close">×</button>
+    </div>
+
+    <div class="settings-section">
+      <h3>When is your birthday?</h3>
+      <div class="field-row">
+        <span>Date of birth</span>
+        <input type="date" id="birthdayInput">
+      </div>
+      <h3 style="margin-top:16px;">How many years do you expect to live?</h3>
+      <div class="field-row">
+        <span>Expected lifespan</span>
+        <input type="number" id="lifespanInput" min="1" max="130" step="1">
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Which bars to show?</h3>
+      <div class="toggle-group" id="barToggles">
+        <label class="chip" data-bar="year"><input type="checkbox" data-bar-checkbox="year"><span>Year</span></label>
+        <label class="chip" data-bar="month"><input type="checkbox" data-bar-checkbox="month"><span>Month</span></label>
+        <label class="chip" data-bar="week"><input type="checkbox" data-bar-checkbox="week"><span>Week</span></label>
+        <label class="chip" data-bar="day"><input type="checkbox" data-bar-checkbox="day"><span>Day</span></label>
+        <label class="chip" data-bar="life"><input type="checkbox" data-bar-checkbox="life"><span>Life</span></label>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>First day of the week</h3>
+      <div class="segmented" id="fdowSegmented">
+        <label id="fdowMonday"><input type="radio" name="fdow" value="monday"><span>Monday</span></label>
+        <label id="fdowSunday"><input type="radio" name="fdow" value="sunday"><span>Sunday</span></label>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="switch-row">
+        <h3 style="margin:0;">Dark mode</h3>
+        <label class="switch">
+          <input type="checkbox" id="darkModeToggle">
+          <span class="track"><span class="knob"></span></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Light mode colors</h3>
+      <div class="color-grid">
+        <label class="color-field">Background <input type="color" id="light-bg"></label>
+        <label class="color-field">Progress bar <input type="color" id="light-bar"></label>
+        <label class="color-field">Border <input type="color" id="light-border"></label>
+        <label class="color-field">Text <input type="color" id="light-text"></label>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Dark mode colors</h3>
+      <div class="color-grid">
+        <label class="color-field">Background <input type="color" id="dark-bg"></label>
+        <label class="color-field">Progress bar <input type="color" id="dark-bar"></label>
+        <label class="color-field">Border <input type="color" id="dark-border"></label>
+        <label class="color-field">Text <input type="color" id="dark-text"></label>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Shareable link</h3>
+      <div class="link-row">
+        <input type="text" id="linkOutput" readonly>
+        <button id="copyLinkBtn" type="button">Copy link</button>
+      </div>
+    </div>
+
+    <button class="reset-btn" id="resetBtn" type="button">Reset to defaults</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "progressWidgetSettings.v1";
+
+  var DEFAULTS = {
+    birthday: "",
+    lifespan: 80,
+    bars: { year: true, month: true, week: true, day: true, life: true },
+    firstDayOfWeek: "monday",
+    darkMode: false,
+    colors: {
+      light: { bg: "#ffffff", bar: "#c98a99", border: "#c98a99", text: "#c98a99" },
+      dark:  { bg: "#241a1d", bar: "#d9a6b3", border: "#d9a6b3", text: "#e7c3cc" }
+    }
+  };
+
+  var BAR_LABELS = { year: "Year", month: "Month", week: "Week", day: "Day", life: "Life" };
+  var BAR_ORDER = ["year", "month", "week", "day", "life"];
+  var HEX_KEYS = ["bg", "bar", "border", "text"];
+
+  function isHex(v) { return typeof v === "string" && /^#?[0-9a-fA-F]{6}$/.test(v); }
+  function normHex(v) { return v.charAt(0) === "#" ? v : "#" + v; }
+  function stripHex(v) { return v.charAt(0) === "#" ? v.slice(1) : v; }
+  function isDateStr(v) { return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v); }
+
+  function loadFromStorage() {
+    var loaded = null;
+    try {
+      var raw = window.localStorage.getItem(STORAGE_KEY);
+      if (raw) loaded = JSON.parse(raw);
+    } catch (e) { loaded = null; }
+    return loaded;
+  }
+
+  function mergeInto(base, loaded) {
+    if (!loaded || typeof loaded !== "object") return base;
+    if (isDateStr(loaded.birthday)) base.birthday = loaded.birthday;
+    if (typeof loaded.lifespan === "number" && loaded.lifespan > 0) base.lifespan = loaded.lifespan;
+    if (loaded.firstDayOfWeek === "sunday" || loaded.firstDayOfWeek === "monday") base.firstDayOfWeek = loaded.firstDayOfWeek;
+    if (typeof loaded.darkMode === "boolean") base.darkMode = loaded.darkMode;
+    if (loaded.bars) {
+      BAR_ORDER.forEach(function (k) {
+        if (typeof loaded.bars[k] === "boolean") base.bars[k] = loaded.bars[k];
+      });
+    }
+    if (loaded.colors) {
+      ["light", "dark"].forEach(function (mode) {
+        if (loaded.colors[mode]) {
+          HEX_KEYS.forEach(function (k) {
+            if (typeof loaded.colors[mode][k] === "string") base.colors[mode][k] = loaded.colors[mode][k];
+          });
+        }
+      });
+    }
+    return base;
+  }
+
+  // ---------- URL <-> state ----------
+  // Short keys: y,m,w,d,l = bar toggles (1/0) | dob | exp | fdow (m/s) | dark (1/0)
+  // lbg,lbar,lbrd,ltx = light colors | dbg,dbar,dbrd,dtx = dark colors (hex, no #)
+  function paramsFromURL() {
+    var out = {};
+    try {
+      var p = new URLSearchParams(window.location.search);
+      var barMap = { y: "year", m: "month", w: "week", d: "day", l: "life" };
+      out.bars = {};
+      Object.keys(barMap).forEach(function (short) {
+        if (p.has(short)) out.bars[barMap[short]] = p.get(short) === "1";
+      });
+      if (p.has("dob") && isDateStr(p.get("dob"))) out.birthday = p.get("dob");
+      if (p.has("exp")) {
+        var e = parseInt(p.get("exp"), 10);
+        if (!isNaN(e) && e > 0) out.lifespan = e;
+      }
+      if (p.has("fdow")) out.firstDayOfWeek = p.get("fdow") === "s" ? "sunday" : "monday";
+      if (p.has("dark")) out.darkMode = p.get("dark") === "1";
+      out.colors = { light: {}, dark: {} };
+      var lightMap = { lbg: "bg", lbar: "bar", lbrd: "border", ltx: "text" };
+      var darkMap = { dbg: "bg", dbar: "bar", dbrd: "border", dtx: "text" };
+      Object.keys(lightMap).forEach(function (k) {
+        if (p.has(k) && isHex(p.get(k))) out.colors.light[lightMap[k]] = normHex(p.get(k));
+      });
+      Object.keys(darkMap).forEach(function (k) {
+        if (p.has(k) && isHex(p.get(k))) out.colors.dark[darkMap[k]] = normHex(p.get(k));
+      });
+    } catch (e) { /* ignore malformed URL */ }
+    return out;
+  }
+
+  function buildURL(s) {
+    var p = new URLSearchParams();
+    p.set("y", s.bars.year ? "1" : "0");
+    p.set("m", s.bars.month ? "1" : "0");
+    p.set("w", s.bars.week ? "1" : "0");
+    p.set("d", s.bars.day ? "1" : "0");
+    p.set("l", s.bars.life ? "1" : "0");
+    if (s.birthday) p.set("dob", s.birthday);
+    p.set("exp", String(s.lifespan));
+    p.set("fdow", s.firstDayOfWeek === "sunday" ? "s" : "m");
+    p.set("dark", s.darkMode ? "1" : "0");
+    p.set("lbg", stripHex(s.colors.light.bg));
+    p.set("lbar", stripHex(s.colors.light.bar));
+    p.set("lbrd", stripHex(s.colors.light.border));
+    p.set("ltx", stripHex(s.colors.light.text));
+    p.set("dbg", stripHex(s.colors.dark.bg));
+    p.set("dbar", stripHex(s.colors.dark.bar));
+    p.set("dbrd", stripHex(s.colors.dark.border));
+    p.set("dtx", stripHex(s.colors.dark.text));
+    return window.location.origin + window.location.pathname + "?" + p.toString();
+  }
+
+  function updateURL() {
+    var url = buildURL(state);
+    try {
+      window.history.replaceState(null, "", url);
+    } catch (e) { /* ignore */ }
+    var out = document.getElementById("linkOutput");
+    if (out) out.value = url;
+  }
+
+  var state = (function () {
+    var base = JSON.parse(JSON.stringify(DEFAULTS));
+    base = mergeInto(base, loadFromStorage());
+    base = mergeInto(base, paramsFromURL()); // URL params win, so shared links reproduce exactly
+    return base;
+  })();
+
+  function saveSettings() {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) { /* storage unavailable — widget still works this session */ }
+    updateURL();
+  }
+
+  // ---------- DOM refs ----------
+  var barsContainer = document.getElementById("barsContainer");
+  var overlay = document.getElementById("overlay");
+  var customizeBtn = document.getElementById("customizeBtn");
+  var closeBtn = document.getElementById("closeBtn");
+  var resetBtn = document.getElementById("resetBtn");
+  var birthdayInput = document.getElementById("birthdayInput");
+  var lifespanInput = document.getElementById("lifespanInput");
+  var darkModeToggle = document.getElementById("darkModeToggle");
+  var fdowMonday = document.getElementById("fdowMonday");
+  var fdowSunday = document.getElementById("fdowSunday");
+  var linkOutput = document.getElementById("linkOutput");
+  var copyLinkBtn = document.getElementById("copyLinkBtn");
+
+  // ---------- Percent calculations ----------
+  function pct(now, start, end) {
+    var total = end - start;
+    if (total <= 0) return 0;
+    var v = ((now - start) / total) * 100;
+    return Math.max(0, Math.min(100, v));
+  }
+
+  function computePercents() {
+    var now = new Date();
+    var y = now.getFullYear();
+
+    var yearStart = new Date(y, 0, 1, 0, 0, 0, 0);
+    var yearEnd = new Date(y + 1, 0, 1, 0, 0, 0, 0);
+
+    var monthStart = new Date(y, now.getMonth(), 1, 0, 0, 0, 0);
+    var monthEnd = new Date(y, now.getMonth() + 1, 1, 0, 0, 0, 0);
+
+    var dow = now.getDay();
+    var offset = state.firstDayOfWeek === "monday" ? (dow + 6) % 7 : dow;
+    var weekStart = new Date(y, now.getMonth(), now.getDate() - offset, 0, 0, 0, 0);
+    var weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    var dayStart = new Date(y, now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    var dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+
+    var result = {
+      year: pct(now, yearStart, yearEnd),
+      month: pct(now, monthStart, monthEnd),
+      week: pct(now, weekStart, weekEnd),
+      day: pct(now, dayStart, dayEnd),
+      life: 0
+    };
+
+    if (state.birthday) {
+      var bday = new Date(state.birthday + "T00:00:00");
+      if (!isNaN(bday.getTime())) {
+        var lifeEnd = new Date(bday.getFullYear() + state.lifespan, bday.getMonth(), bday.getDate(),
+          bday.getHours(), bday.getMinutes(), bday.getSeconds(), 0);
+        result.life = pct(now, bday, lifeEnd);
+      }
+    }
+    return result;
+  }
+
+  // ---------- Rendering ----------
+  function applyTheme() {
+    var mode = state.darkMode ? "dark" : "light";
+    var c = state.colors[mode];
+    var root = document.documentElement.style;
+    root.setProperty("--bg", c.bg);
+    root.setProperty("--bar", c.bar);
+    root.setProperty("--border", c.border);
+    root.setProperty("--text", c.text);
+    document.body.setAttribute("data-panel-dark", state.darkMode ? "true" : "false");
+  }
+
+  function renderBars() {
+    var percents = computePercents();
+    var activeBars = BAR_ORDER.filter(function (k) { return state.bars[k]; });
+
+    barsContainer.innerHTML = "";
+
+    if (activeBars.length === 0) {
+      var empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = "No bars selected — open Customize to add some.";
+      barsContainer.appendChild(empty);
+      return;
+    }
+
+    activeBars.forEach(function (key) {
+      var row = document.createElement("div");
+      row.className = "bar-row";
+
+      var track = document.createElement("div");
+      track.className = "bar-track";
+      var fill = document.createElement("div");
+      fill.className = "bar-fill";
+      fill.style.width = percents[key].toFixed(1) + "%";
+      track.appendChild(fill);
+
+      var label = document.createElement("div");
+      label.className = "bar-label";
+      label.textContent = BAR_LABELS[key] + ": " + Math.round(percents[key]) + "%";
+
+      row.appendChild(track);
+      row.appendChild(label);
+      barsContainer.appendChild(row);
+    });
+  }
+
+  function render() {
+    applyTheme();
+    renderBars();
+  }
+
+  // ---------- Settings panel sync ----------
+  function syncPanelFromState() {
+    birthdayInput.value = state.birthday || "";
+    lifespanInput.value = state.lifespan;
+    darkModeToggle.checked = state.darkMode;
+
+    document.querySelectorAll("[data-bar-checkbox]").forEach(function (cb) {
+      var key = cb.getAttribute("data-bar-checkbox");
+      cb.checked = !!state.bars[key];
+      var chip = cb.closest(".chip");
+      if (chip) chip.classList.toggle("active", cb.checked);
+    });
+
+    fdowMonday.classList.toggle("active", state.firstDayOfWeek === "monday");
+    fdowSunday.classList.toggle("active", state.firstDayOfWeek === "sunday");
+    fdowMonday.querySelector("input").checked = state.firstDayOfWeek === "monday";
+    fdowSunday.querySelector("input").checked = state.firstDayOfWeek === "sunday";
+
+    HEX_KEYS.forEach(function (k) {
+      document.getElementById("light-" + k).value = state.colors.light[k];
+      document.getElementById("dark-" + k).value = state.colors.dark[k];
+    });
+
+    linkOutput.value = buildURL(state);
+  }
+
+  function openPanel() {
+    syncPanelFromState();
+    overlay.classList.add("open");
+  }
+  function closePanel() {
+    overlay.classList.remove("open");
+  }
+
+  customizeBtn.addEventListener("click", openPanel);
+  closeBtn.addEventListener("click", closePanel);
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) closePanel();
+  });
+
+  birthdayInput.addEventListener("change", function () {
+    state.birthday = birthdayInput.value;
+    saveSettings();
+    syncPanelFromState();
+    render();
+  });
+
+  lifespanInput.addEventListener("input", function () {
+    var v = parseInt(lifespanInput.value, 10);
+    if (!isNaN(v) && v > 0) {
+      state.lifespan = v;
+      saveSettings();
+      syncPanelFromState();
+      render();
+    }
+  });
+
+  document.querySelectorAll("[data-bar-checkbox]").forEach(function (cb) {
+    cb.addEventListener("change", function () {
+      var key = cb.getAttribute("data-bar-checkbox");
+      state.bars[key] = cb.checked;
+      var chip = cb.closest(".chip");
+      if (chip) chip.classList.toggle("active", cb.checked);
+      saveSettings();
+      syncPanelFromState();
+      render();
+    });
+  });
+
+  [fdowMonday, fdowSunday].forEach(function (el) {
+    el.addEventListener("click", function () {
+      var val = el.querySelector("input").value;
+      state.firstDayOfWeek = val;
+      saveSettings();
+      syncPanelFromState();
+      render();
+    });
+  });
+
+  darkModeToggle.addEventListener("change", function () {
+    state.darkMode = darkModeToggle.checked;
+    saveSettings();
+    syncPanelFromState();
+    render();
+  });
+
+  HEX_KEYS.forEach(function (k) {
+    document.getElementById("light-" + k).addEventListener("input", function (e) {
+      state.colors.light[k] = e.target.value;
+      saveSettings();
+      syncPanelFromState();
+      render();
+    });
+    document.getElementById("dark-" + k).addEventListener("input", function (e) {
+      state.colors.dark[k] = e.target.value;
+      saveSettings();
+      syncPanelFromState();
+      render();
+    });
+  });
+
+  copyLinkBtn.addEventListener("click", function () {
+    var url = buildURL(state);
+    var done = function () {
+      copyLinkBtn.textContent = "Copied!";
+      copyLinkBtn.classList.add("copied");
+      setTimeout(function () {
+        copyLinkBtn.textContent = "Copy link";
+        copyLinkBtn.classList.remove("copied");
+      }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(url).then(done, function () { fallbackCopy(url, done); });
+    } else {
+      fallbackCopy(url, done);
+    }
+  });
+
+  function fallbackCopy(text, cb) {
+    try {
+      linkOutput.value = text;
+      linkOutput.select();
+      linkOutput.setSelectionRange(0, text.length);
+      document.execCommand("copy");
+      cb();
+    } catch (e) { /* copy unsupported — link is still visible/selectable in the field */ }
+  }
+
+  resetBtn.addEventListener("click", function () {
+    state = JSON.parse(JSON.stringify(DEFAULTS));
+    saveSettings();
+    syncPanelFromState();
+    render();
+  });
+
+  // ---------- Init ----------
+  saveSettings(); // normalizes URL + storage to the resolved initial state
+  syncPanelFromState();
+  render();
+  setInterval(render, 1000);
+})();
+</script>
+</body>
+</html>
