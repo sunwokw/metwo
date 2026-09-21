@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="Clean, minimal, aesthetic progress bar widget for Notion tracking Year, Month, Week, Day, and Life.">
+  <title>Notion Progress Bar Widget</title>
+  <style>
+    /* ==========================================================================
+       DESIGN SYSTEM & DYNAMIC CSS VARIABLES
+       - Strict system font stack (no external requests or fonts)
+       - Dynamic variables updated live by JavaScript theme and color settings
+       ========================================================================== */
+    :root {
+      /* Dynamic Theme Colors (defaults match prompt & visual reference) */
+      --bg-color: #ffffff;
+      --bar-color: #c98a99;
+      --border-color: #c98a99;
+      --text-color: #c98a99;
+
+      /* Dimensions & Spacing matching reference image */
+      --bar-height: 42px;
+      --bar-border-width: 2px;
+      --bar-radius: 6px;
+      --fill-radius: 3.5px;
+      --bar-padding: 3.5px; /* Inset gap between track border and inner fill */
+      --row-gap: 16px;      /* Generous ~16px vertical spacing between bars */
+      --label-gap: 18px;    /* Gap between bar track and label */
+
+      /* Typography */
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-size: 20px;
+      --font-weight: 500;   /* Medium weight matching reference */
+
+      /* Settings Panel UI */
+      --panel-bg: #ffffff;
+      --panel-card-bg: #ffffff;
+      --panel-border: rgba(201, 138, 153, 0.35);
+      --panel-text: #333333;
+      --panel-subtext: #777777;
+      --panel-input-bg: #faf7f8;
+      --panel-chip-inactive: #f0ebeb;
+      --panel-chip-inactive-text: #666666;
+      --panel-shadow: rgba(0, 0, 0, 0.12);
+      --overlay-bg: rgba(0, 0, 0, 0.35);
+    }
+
+    /* Dark Mode System Overrides for Settings Panel */
+    body.is-dark-mode {
+      --panel-bg: #1c1417;
+      --panel-card-bg: #241a1d;
+      --panel-border: rgba(217, 166, 179, 0.28);
+      --panel-text: #f3e6e9;
+      --panel-subtext: #b59ea5;
+      --panel-input-bg: #2d2125;
+      --panel-chip-inactive: #382a2e;
+      --panel-chip-inactive-text: #baa8ad;
+      --panel-shadow: rgba(0, 0, 0, 0.45);
+      --overlay-bg: rgba(0, 0, 0, 0.65);
+    }
+
+    /* Reset & Base Setup */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: var(--font-family);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      overflow-x: hidden;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+
+    /* Outer Wrapper for Notion Embed */
+    .widget-viewport {
+      width: 100%;
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 20px 24px;
+      padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+      container-type: inline-size;
+      container-name: widget;
+    }
+
+    /* Main Container */
+    .widget-container {
+      width: 100%;
+      max-width: 860px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+    }
+
+    /* Progress List: Reflows automatically when bars are toggled */
+    .progress-list {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: var(--row-gap);
+    }
+
+    /* Progress Row: Bar + Label */
+    .progress-row {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      gap: var(--label-gap);
+    }
+
+    /* Progress Track: Outer border matching reference image */
+    .progress-track {
+      flex: 1 1 0%;
+      min-width: 0;
+      height: var(--bar-height);
+      border: var(--bar-border-width) solid var(--border-color);
+      border-radius: var(--bar-radius);
+      background-color: var(--bg-color);
+      padding: var(--bar-padding);
+      display: flex;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s ease, background-color 0.2s ease;
+    }
+
+    /* Progress Fill: Inset rounded fill */
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background-color: var(--bar-color);
+      border-radius: var(--fill-radius);
+      transition: width 0.4s cubic-bezier(0.25, 1, 0.5, 1), background-color 0.2s ease;
+      will-change: width;
+    }
+
+    /* Percentage Label ("Year: 72%", "Day: 65%", "Life: 27%") */
+    .progress-label {
+      flex-shrink: 0;
+      font-size: var(--font-size);
+      font-weight: var(--font-weight);
+      color: var(--text-color);
+      white-space: nowrap;
+      user-select: none;
+      line-height: 1;
+      letter-spacing: 0.2px;
+      transition: color 0.2s ease;
+    }
+
+    /* Empty state notice if user unchecks all 5 bars */
+    .empty-state {
+      display: none;
+      text-align: center;
+      padding: 24px 16px;
+      color: var(--text-color);
+      font-size: 15px;
+      font-weight: 500;
+      opacity: 0.85;
+    }
+
+    .empty-state.visible {
+      display: block;
+    }
+
+    /* ==========================================================================
+       CUSTOMIZE BUTTON (Pill-shaped, minimal, below the bars)
+       ========================================================================== */
+    .customize-action {
+      display: flex;
+      justify-content: center;
+      width: 100%;
+      margin-top: 4px;
+    }
+
+    .customize-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 6px 16px;
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text-color);
+      background-color: transparent;
+      border: 1px solid var(--border-color);
+      border-radius: 9999px; /* Pill-shaped */
+      cursor: pointer;
+      opacity: 0.65;
+      transition: opacity 0.2s ease, background-color 0.2s ease, transform 0.15s ease;
+      user-select: none;
+    }
+
+    .customize-btn:hover,
+    .customize-btn:focus-visible {
+      opacity: 1;
+      background-color: rgba(201, 138, 153, 0.12);
+      outline: none;
+      transform: translateY(-1px);
+    }
+
+    .customize-btn:active {
+      transform: translateY(0);
+    }
+
+    .customize-btn svg {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* ==========================================================================
+       SETTINGS PANEL (Centered Modal on Desktop, Bottom Sheet on Mobile)
+       ========================================================================== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background-color: var(--overlay-bg);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 1000;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      width: 100%;
+      max-width: 480px;
+      max-height: 88vh;
+      background-color: var(--panel-card-bg);
+      color: var(--panel-text);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      box-shadow: 0 16px 36px var(--panel-shadow);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transform: scale(0.96) translateY(8px);
+      transition: transform 0.25s cubic-bezier(0.2, 0.9, 0.3, 1), background-color 0.2s ease;
+    }
+
+    .modal-overlay.open .modal-card {
+      transform: scale(1) translateY(0);
+    }
+
+    /* Modal Header */
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 22px 14px;
+      border-bottom: 1px solid var(--panel-border);
+    }
+
+    .modal-title {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      color: var(--panel-text);
+    }
+
+    .modal-close-btn {
+      background: none;
+      border: none;
+      font-size: 20px;
+      line-height: 1;
+      color: var(--panel-subtext);
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .modal-close-btn:hover {
+      color: var(--panel-text);
+      background-color: rgba(0, 0, 0, 0.06);
+    }
+
+    /* Modal Body (Scrollable) */
+    .modal-body {
+      padding: 18px 22px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Section Groups */
+    .settings-section {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .section-title {
+      font-size: 11.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--panel-subtext);
+    }
+
+    /* Setting Item / Row */
+    .setting-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .setting-item-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .setting-label {
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--panel-text);
+    }
+
+    .setting-hint {
+      font-size: 11.5px;
+      color: var(--panel-subtext);
+    }
+
+    /* Inputs (Date & Number) */
+    .text-input {
+      width: 100%;
+      height: 38px;
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 13.5px;
+      color: var(--panel-text);
+      background-color: var(--panel-input-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 7px;
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .text-input:focus {
+      border-color: var(--bar-color);
+      box-shadow: 0 0 0 2px rgba(201, 138, 153, 0.25);
+    }
+
+    /* Toggle Chips / Checkboxes for Bars */
+    .chips-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 9999px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      background-color: var(--panel-chip-inactive);
+      color: var(--panel-chip-inactive-text);
+      transition: all 0.18s ease;
+      user-select: none;
+    }
+
+    .chip-btn.active {
+      background-color: var(--bar-color);
+      color: #ffffff;
+      border-color: var(--bar-color);
+    }
+
+    .chip-btn:hover:not(.active) {
+      background-color: rgba(201, 138, 153, 0.2);
+    }
+
+    /* Segmented Control (First Day of Week) */
+    .segmented-control {
+      display: flex;
+      background-color: var(--panel-chip-inactive);
+      padding: 3px;
+      border-radius: 8px;
+      gap: 2px;
+      width: 100%;
+    }
+
+    .segment-btn {
+      flex: 1;
+      padding: 6px 12px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: center;
+      border: none;
+      background: none;
+      color: var(--panel-chip-inactive-text);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+
+    .segment-btn.active {
+      background-color: var(--panel-card-bg);
+      color: var(--panel-text);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+      font-weight: 600;
+    }
+
+    /* Modern Toggle Switch */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: var(--panel-chip-inactive);
+      border-radius: 24px;
+      transition: background-color 0.2s ease;
+    }
+
+    .slider::before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: #ffffff;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s ease;
+    }
+
+    .switch input:checked + .slider {
+      background-color: var(--bar-color);
+    }
+
+    .switch input:checked + .slider::before {
+      transform: translateX(20px);
+    }
+
+    /* Appearance / Colors Grid */
+    .colors-palette-box {
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background-color: var(--panel-input-bg);
+    }
+
+    .palette-heading {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--panel-text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .color-row-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .color-control {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 8px;
+      background-color: var(--panel-card-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 6px;
+      gap: 6px;
+    }
+
+    .color-info {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .color-title {
+      font-size: 11.5px;
+      font-weight: 500;
+      color: var(--panel-text);
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+    }
+
+    .color-hex {
+      font-size: 10px;
+      font-family: monospace;
+      color: var(--panel-subtext);
+      text-transform: uppercase;
+    }
+
+    .color-input-wrapper {
+      position: relative;
+      width: 26px;
+      height: 26px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      overflow: hidden;
+      border: 1.5px solid rgba(0, 0, 0, 0.15);
+      cursor: pointer;
+    }
+
+    .color-input-wrapper input[type="color"] {
+      position: absolute;
+      top: -10px;
+      left: -10px;
+      width: 48px;
+      height: 48px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 0;
+    }
+
+    /* Modal Footer */
+    .modal-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 22px;
+      border-top: 1px solid var(--panel-border);
+      background-color: var(--panel-card-bg);
+    }
+
+    .btn-reset {
+      background: none;
+      border: none;
+      color: var(--panel-subtext);
+      font-family: inherit;
+      font-size: 12.5px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 6px;
+      transition: color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .btn-reset:hover {
+      color: #d14d68;
+      background-color: rgba(209, 77, 104, 0.08);
+    }
+
+    .btn-done {
+      background-color: var(--bar-color);
+      color: #ffffff;
+      border: none;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 7px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: opacity 0.15s ease;
+    }
+
+    .btn-done:hover {
+      opacity: 0.9;
+    }
+
+    /* ==========================================================================
+       RESPONSIVE DESIGN & CONTAINER QUERIES
+       Scales gracefully down to narrow Notion columns and mobile viewports
+       ========================================================================== */
+    @container (max-width: 600px) {
+      .widget-viewport { padding: 14px 16px; }
+      .progress-list { gap: 14px; }
+      .progress-row { gap: 14px; }
+      .progress-track { height: 36px; padding: 3px; }
+      .progress-label { font-size: 16px; }
+    }
+
+    @container (max-width: 380px) {
+      .widget-viewport { padding: 10px 12px; }
+      .progress-list { gap: 11px; }
+      .progress-row { gap: 10px; }
+      .progress-track { height: 28px; padding: 2.5px; border-radius: 5px; }
+      .progress-fill { border-radius: 2.5px; }
+      .progress-label { font-size: 13px; }
+      .customize-btn { font-size: 11px; padding: 4px 12px; }
+    }
+
+    /* Bottom Sheet on Narrow / Mobile Screens */
+    @media (max-width: 560px) {
+      .modal-overlay {
+        align-items: flex-end;
+        padding: 0;
+      }
+      .modal-card {
+        max-width: 100%;
+        max-height: 85vh;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        border-top-left-radius: 18px;
+        border-top-right-radius: 18px;
+        transform: translateY(100%);
+      }
+      .modal-overlay.open .modal-card {
+        transform: translateY(0);
+      }
+      .color-row-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Viewport wrapper for Notion embed -->
+  <div class="widget-viewport">
+    <main class="widget-container" id="widgetContainer">
+      
+      <!-- List of Bars (Year, Month, Week, Day, Life) -->
+      <div class="progress-list" id="progressList" role="region" aria-label="Time Progress Tracker">
+        
+        <!-- YEAR BAR -->
+        <div class="progress-row" id="row-year">
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="track-year" aria-label="Year Progress">
+            <div class="progress-fill" id="fill-year"></div>
+          </div>
+          <div class="progress-label" id="label-year">Year: 0%</div>
+        </div>
+
+        <!-- MONTH BAR -->
+        <div class="progress-row" id="row-month">
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="track-month" aria-label="Month Progress">
+            <div class="progress-fill" id="fill-month"></div>
+          </div>
+          <div class="progress-label" id="label-month">Month: 0%</div>
+        </div>
+
+        <!-- WEEK BAR -->
+        <div class="progress-row" id="row-week">
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="track-week" aria-label="Week Progress">
+            <div class="progress-fill" id="fill-week"></div>
+          </div>
+          <div class="progress-label" id="label-week">Week: 0%</div>
+        </div>
+
+        <!-- DAY BAR -->
+        <div class="progress-row" id="row-day">
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="track-day" aria-label="Day Progress">
+            <div class="progress-fill" id="fill-day"></div>
+          </div>
+          <div class="progress-label" id="label-day">Day: 0%</div>
+        </div>
+
+        <!-- LIFE BAR -->
+        <div class="progress-row" id="row-life">
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="track-life" aria-label="Life Progress">
+            <div class="progress-fill" id="fill-life"></div>
+          </div>
+          <div class="progress-label" id="label-life">Life: 0%</div>
+        </div>
+
+      </div>
+
+      <!-- Empty state notice if user disables all bars -->
+      <div class="empty-state" id="emptyNotice">
+        All progress bars are hidden. Click Customize below to enable bars.
+      </div>
+
+      <!-- Pill-shaped Customize Button -->
+      <div class="customize-action">
+        <button class="customize-btn" id="openSettingsBtn" aria-label="Customize progress bar widget">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          Customize
+        </button>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Settings Modal (Desktop Centered / Mobile Bottom Sheet) -->
+  <div class="modal-overlay" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+    <div class="modal-card">
+      
+      <div class="modal-header">
+        <h2 class="modal-title" id="settingsModalTitle">Customize Widget</h2>
+        <button type="button" class="modal-close-btn" id="closeSettingsBtn" aria-label="Close settings">✕</button>
+      </div>
+
+      <div class="modal-body">
+        
+        <!-- SECTION 1: WHICH BARS TO SHOW -->
+        <div class="settings-section">
+          <div class="section-title">Visible Bars</div>
+          <div class="chips-group" id="barsToggleGroup">
+            <button type="button" class="chip-btn active" data-bar="year">Year</button>
+            <button type="button" class="chip-btn active" data-bar="month">Month</button>
+            <button type="button" class="chip-btn active" data-bar="week">Week</button>
+            <button type="button" class="chip-btn active" data-bar="day">Day</button>
+            <button type="button" class="chip-btn active" data-bar="life">Life</button>
+          </div>
+        </div>
+
+        <!-- SECTION 2: LIFE SETTINGS -->
+        <div class="settings-section" id="lifeSettingsSection">
+          <div class="section-title">Life Calculation</div>
+          <div class="setting-item">
+            <label class="setting-label" for="birthdayInput">Date of Birth</label>
+            <input type="date" class="text-input" id="birthdayInput">
+          </div>
+          <div class="setting-item">
+            <label class="setting-label" for="lifespanInput">Expected Lifespan (Years)</label>
+            <input type="number" class="text-input" id="lifespanInput" min="1" max="150" step="1">
+          </div>
+        </div>
+
+        <!-- SECTION 3: FIRST DAY OF WEEK -->
+        <div class="settings-section" id="weekSettingsSection">
+          <div class="section-title">Week Calculation</div>
+          <div class="setting-item">
+            <div class="setting-label">First Day of the Week</div>
+            <div class="segmented-control" id="firstDayControl">
+              <button type="button" class="segment-btn active" data-day="monday">Monday</button>
+              <button type="button" class="segment-btn" data-day="sunday">Sunday</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 4: DARK MODE SWITCH -->
+        <div class="settings-section">
+          <div class="section-title">Theme Mode</div>
+          <div class="setting-item-row">
+            <div>
+              <div class="setting-label">Dark Mode</div>
+              <div class="setting-hint">Toggle between light and dark palettes</div>
+            </div>
+            <label class="switch" for="darkModeSwitch">
+              <input type="checkbox" id="darkModeSwitch">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- SECTION 5: APPEARANCE & COLORS -->
+        <div class="settings-section">
+          <div class="section-title">Appearance & Colors</div>
+
+          <!-- Light Mode Colors -->
+          <div class="colors-palette-box">
+            <div class="palette-heading">
+              <span>☀️ Light Mode Colors</span>
+            </div>
+            <div class="color-row-grid">
+              <div class="color-control">
+                <div class="color-info">
+                  <span class="color-title">Background</span>
+                  <span class="color-hex" id="hex-light-bg">#ffffff</span>
+                </div>
+                <div class="color-input-wrapper">
+                  <input type="color" id="color-light-bg" value="#ffffff" aria-label="Light background color">
+                </div>
+              </div>
+
+              <div class="color-control">
+                <div class="color-info">
+                  <span class="color-title">Progress Bar</span>
+                  <span class="color-hex" id="hex-light-bar">#c98a99</span>
+                </div>
+                <div class="color-input-wrapper">
+                  <input type="color" id="color-light-bar" value="#c98a99" aria-label="Light progress bar color">
+                </div>
+              </div>
+
+              <div class="color-control">
+                <div class="color-info">
+                  <span class="color-title">Border</span>
+                  <span class="color-hex" id="hex-light-border">#c98a99</span>
+                </div>
+                <div class="color-input-wrapper">
+                  <input type="color" id="color-light-border" value="#c98a99" aria-label="Light border color">
+                </div>
+              </div>
+
+              <div class="color-control">
+                <div class="color-info">
+                  <span class="color-title">Text</span>
+                  <span class="color-hex" id="hex-light-text">#c98a99</span>
+                </div>
+                <div class="color-input-wrapper">
+                  <input type="color" id="color-light-text" value="#c98a99" aria-label="Light text color">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dark Mode Colors -->
+          <div class="colors-palette-box">
+            <div class="palette-heading">
+              <span>🌙 Dark Mode Colors</span>
+            </div>
+            <div class="color-row-grid">
+              <div class="color-control">
+                <div class="color-info">
+                  <span class="color-title">Background</span>
+                  <span class="color-hex" id="hex-dark-bg">#241a1d</span>
+                </div>
+                <div class="color-input-wrapper">
+                  <input type="color" id="color-dark-bg" value="#241a1d" aria-label="Dark background color">
+                </div>
+              </div>
+
+              <div class="color-control">
+                <div class="color-info">
+                  <span class="color-title">Progress Bar</span>
+                  <span class="color-hex" id="hex-dark-bar">#d9a6b3</span>
+                </div>
+                <div class="color-input-wrapper">
+                  <input type="color" id="color-dark-bar" value="#d9a6b3" aria-label="Dark progress bar color">
+                </div>
+              </div>
+
+              <div class="color-control">
+                <div class="color-info">
+                  <span class="color-title">Border</span>
+                  <span class="color-hex" id="hex-dark-border">#d9a6b3</span>
+                </div>
+                <div class="color-input-wrapper">
+                  <input type="color" id="color-dark-border" value="#d9a6b3" aria-label="Dark border color">
+                </div>
+              </div>
+
+              <div class="color-control">
+                <div class="color-info">
+                  <span class="color-title">Text</span>
+                  <span class="color-hex" id="hex-dark-text">#e7c3cc</span>
+                </div>
+                <div class="color-input-wrapper">
+                  <input type="color" id="color-dark-text" value="#e7c3cc" aria-label="Dark text color">
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="modal-footer">
+        <button type="button" class="btn-reset" id="resetDefaultsBtn">Reset to defaults</button>
+        <button type="button" class="btn-done" id="doneSettingsBtn">Done</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       JAVASCRIPT LOGIC
+       - Vanilla JS, zero dependencies, no form tags, instant live updates
+       - Safe localStorage with error handling for Notion iframe embeds
+       ========================================================================== -->
+  <script>
+    (function () {
+      'use strict';
+
+      // --- Default Configurations ---
+      const DEFAULT_SETTINGS = {
+        birthday: '2000-01-01',
+        lifespan: 80,
+        bars: {
+          year: true,
+          month: true,
+          week: true,
+          day: true,
+          life: true
+        },
+        firstDayOfWeek: 'monday', // 'monday' or 'sunday'
+        darkMode: false,
+        colorsLight: {
+          bg: '#ffffff',
+          bar: '#c98a99',
+          border: '#c98a99',
+          text: '#c98a99'
+        },
+        colorsDark: {
+          bg: '#241a1d',
+          bar: '#d9a6b3',
+          border: '#d9a6b3',
+          text: '#e7c3cc'
+        }
+      };
+
+      const STORAGE_KEY = 'notion_progress_widget_settings';
+
+      // --- State ---
+      let state = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+
+      // --- DOM Elements ---
+      const root = document.documentElement;
+      const body = document.body;
+      const progressList = document.getElementById('progressList');
+      const emptyNotice = document.getElementById('emptyNotice');
+
+      const rows = {
+        year: document.getElementById('row-year'),
+        month: document.getElementById('row-month'),
+        week: document.getElementById('row-week'),
+        day: document.getElementById('row-day'),
+        life: document.getElementById('row-life')
+      };
+
+      const fills = {
+        year: document.getElementById('fill-year'),
+        month: document.getElementById('fill-month'),
+        week: document.getElementById('fill-week'),
+        day: document.getElementById('fill-day'),
+        life: document.getElementById('fill-life')
+      };
+
+      const labels = {
+        year: document.getElementById('label-year'),
+        month: document.getElementById('label-month'),
+        week: document.getElementById('label-week'),
+        day: document.getElementById('label-day'),
+        life: document.getElementById('label-life')
+      };
+
+      const tracks = {
+        year: document.getElementById('track-year'),
+        month: document.getElementById('track-month'),
+        week: document.getElementById('track-week'),
+        day: document.getElementById('track-day'),
+        life: document.getElementById('track-life')
+      };
+
+      // Modal Elements
+      const settingsModal = document.getElementById('settingsModal');
+      const openSettingsBtn = document.getElementById('openSettingsBtn');
+      const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+      const doneSettingsBtn = document.getElementById('doneSettingsBtn');
+      const resetDefaultsBtn = document.getElementById('resetDefaultsBtn');
+
+      // Inputs
+      const birthdayInput = document.getElementById('birthdayInput');
+      const lifespanInput = document.getElementById('lifespanInput');
+      const darkModeSwitch = document.getElementById('darkModeSwitch');
+      const barsToggleGroup = document.getElementById('barsToggleGroup');
+      const firstDayControl = document.getElementById('firstDayControl');
+
+      // Color pickers & hex indicators
+      const colorInputs = {
+        light: {
+          bg: document.getElementById('color-light-bg'),
+          bar: document.getElementById('color-light-bar'),
+          border: document.getElementById('color-light-border'),
+          text: document.getElementById('color-light-text')
+        },
+        dark: {
+          bg: document.getElementById('color-dark-bg'),
+          bar: document.getElementById('color-dark-bar'),
+          border: document.getElementById('color-dark-border'),
+          text: document.getElementById('color-dark-text')
+        }
+      };
+
+      const hexLabels = {
+        light: {
+          bg: document.getElementById('hex-light-bg'),
+          bar: document.getElementById('hex-light-bar'),
+          border: document.getElementById('hex-light-border'),
+          text: document.getElementById('hex-light-text')
+        },
+        dark: {
+          bg: document.getElementById('hex-dark-bg'),
+          bar: document.getElementById('hex-dark-bar'),
+          border: document.getElementById('hex-dark-border'),
+          text: document.getElementById('hex-dark-text')
+        }
+      };
+
+      // --- Safe LocalStorage Operations ---
+      function safeLoad() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            state = Object.assign({}, DEFAULT_SETTINGS, parsed);
+            // Deep merge nested objects
+            state.bars = Object.assign({}, DEFAULT_SETTINGS.bars, parsed.bars || {});
+            state.colorsLight = Object.assign({}, DEFAULT_SETTINGS.colorsLight, parsed.colorsLight || {});
+            state.colorsDark = Object.assign({}, DEFAULT_SETTINGS.colorsDark, parsed.colorsDark || {});
+          }
+        } catch (e) {
+          console.warn('LocalStorage load failed or blocked by iframe:', e);
+        }
+
+        // Support URL parameters overrides for seamless Notion embeds
+        try {
+          const params = new URLSearchParams(window.location.search);
+          if (params.has('dob') && isValidDateString(params.get('dob'))) {
+            state.birthday = params.get('dob');
+          }
+          if (params.has('lifespan') && !isNaN(Number(params.get('lifespan')))) {
+            state.lifespan = Math.max(1, Math.min(150, Number(params.get('lifespan'))));
+          }
+          if (params.has('dark')) {
+            state.darkMode = params.get('dark') === '1' || params.get('dark') === 'true';
+          }
+          if (params.has('firstday') && (params.get('firstday') === 'sunday' || params.get('firstday') === 'monday')) {
+            state.firstDayOfWeek = params.get('firstday');
+          }
+        } catch (e) {
+          // Ignore URLSearchParams error
+        }
+      }
+
+      function safeSave() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) {
+          console.warn('LocalStorage save failed:', e);
+        }
+      }
+
+      function isValidDateString(str) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(str)) return false;
+        const d = new Date(str + 'T00:00:00');
+        return !isNaN(d.getTime());
+      }
+
+      // --- Calculations ---
+
+      /**
+       * 1. Year Progress: % of current calendar year elapsed
+       */
+      function calculateYearProgress(now) {
+        const year = now.getFullYear();
+        const startOfYear = new Date(year, 0, 1, 0, 0, 0, 0);
+        const endOfYear = new Date(year + 1, 0, 1, 0, 0, 0, 0);
+        const total = endOfYear.getTime() - startOfYear.getTime();
+        const elapsed = now.getTime() - startOfYear.getTime();
+        return Math.min(100, Math.max(0, (elapsed / total) * 100));
+      }
+
+      /**
+       * 2. Month Progress: % of current calendar month elapsed
+       */
+      function calculateMonthProgress(now) {
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const startOfMonth = new Date(year, month, 1, 0, 0, 0, 0);
+        const endOfMonth = new Date(year, month + 1, 1, 0, 0, 0, 0);
+        const total = endOfMonth.getTime() - startOfMonth.getTime();
+        const elapsed = now.getTime() - startOfMonth.getTime();
+        return Math.min(100, Math.max(0, (elapsed / total) * 100));
+      }
+
+      /**
+       * 3. Week Progress: % of current week elapsed respecting firstDayOfWeek
+       */
+      function calculateWeekProgress(now, firstDay) {
+        const jsDay = now.getDay(); // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+        let daysPassed;
+
+        if (firstDay === 'sunday') {
+          daysPassed = jsDay; // 0 for Sun, 1 for Mon, etc.
+        } else {
+          // Monday is first day
+          daysPassed = (jsDay + 6) % 7; // 0 for Mon, 6 for Sun
+        }
+
+        const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysPassed, 0, 0, 0, 0);
+        const totalWeekMs = 7 * 24 * 60 * 60 * 1000;
+        const elapsed = now.getTime() - startOfWeek.getTime();
+        return Math.min(100, Math.max(0, (elapsed / totalWeekMs) * 100));
+      }
+
+      /**
+       * 4. Day Progress: % of current day elapsed (midnight to midnight)
+       */
+      function calculateDayProgress(now) {
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0);
+        const total = endOfDay.getTime() - startOfDay.getTime();
+        const elapsed = now.getTime() - startOfDay.getTime();
+        return Math.min(100, Math.max(0, (elapsed / total) * 100));
+      }
+
+      /**
+       * 5. Life Progress: % of expected lifetime elapsed
+       */
+      function calculateLifeProgress(now, birthdayStr, lifespanYears) {
+        if (!isValidDateString(birthdayStr) || lifespanYears <= 0) {
+          return 0;
+        }
+
+        const [y, m, d] = birthdayStr.split('-').map(Number);
+        const birthDate = new Date(y, m - 1, d, 0, 0, 0, 0);
+        const endDate = new Date(y + Number(lifespanYears), m - 1, d, 0, 0, 0, 0);
+
+        const totalLife = endDate.getTime() - birthDate.getTime();
+        const elapsed = now.getTime() - birthDate.getTime();
+
+        if (totalLife <= 0) return 100;
+        if (elapsed <= 0) return 0;
+
+        return Math.min(100, Math.max(0, (elapsed / totalLife) * 100));
+      }
+
+      // --- Apply Styling & Colors ---
+      function applyTheme() {
+        const isDark = !!state.darkMode;
+        const colors = isDark ? state.colorsDark : state.colorsLight;
+
+        if (isDark) {
+          body.classList.add('is-dark-mode');
+        } else {
+          body.classList.remove('is-dark-mode');
+        }
+
+        root.style.setProperty('--bg-color', colors.bg);
+        root.style.setProperty('--bar-color', colors.bar);
+        root.style.setProperty('--border-color', colors.border);
+        root.style.setProperty('--text-color', colors.text);
+      }
+
+      // --- Update Visibility of Bars ---
+      function applyBarVisibility() {
+        let anyVisible = false;
+        for (const [barKey, isVisible] of Object.entries(state.bars)) {
+          if (rows[barKey]) {
+            rows[barKey].style.display = isVisible ? 'flex' : 'none';
+            if (isVisible) anyVisible = true;
+          }
+        }
+        if (anyVisible) {
+          emptyNotice.classList.remove('visible');
+        } else {
+          emptyNotice.classList.add('visible');
+        }
+      }
+
+      // --- Live Progress Update ---
+      function updateAllProgress() {
+        const now = new Date();
+
+        // 1. Year
+        if (state.bars.year) {
+          const yrPct = calculateYearProgress(now);
+          const yrRound = Math.round(yrPct);
+          fills.year.style.width = yrPct + '%';
+          labels.year.textContent = `Year: ${yrRound}%`;
+          tracks.year.setAttribute('aria-valuenow', yrRound);
+        }
+
+        // 2. Month
+        if (state.bars.month) {
+          const moPct = calculateMonthProgress(now);
+          const moRound = Math.round(moPct);
+          fills.month.style.width = moPct + '%';
+          labels.month.textContent = `Month: ${moRound}%`;
+          tracks.month.setAttribute('aria-valuenow', moRound);
+        }
+
+        // 3. Week
+        if (state.bars.week) {
+          const wkPct = calculateWeekProgress(now, state.firstDayOfWeek);
+          const wkRound = Math.round(wkPct);
+          fills.week.style.width = wkPct + '%';
+          labels.week.textContent = `Week: ${wkRound}%`;
+          tracks.week.setAttribute('aria-valuenow', wkRound);
+        }
+
+        // 4. Day
+        if (state.bars.day) {
+          const dayPct = calculateDayProgress(now);
+          const dayRound = Math.round(dayPct);
+          fills.day.style.width = dayPct + '%';
+          labels.day.textContent = `Day: ${dayRound}%`;
+          tracks.day.setAttribute('aria-valuenow', dayRound);
+        }
+
+        // 5. Life
+        if (state.bars.life) {
+          const lifePct = calculateLifeProgress(now, state.birthday, state.lifespan);
+          const lifeRound = Math.round(lifePct);
+          fills.life.style.width = lifePct + '%';
+          labels.life.textContent = `Life: ${lifeRound}%`;
+          tracks.life.setAttribute('aria-valuenow', lifeRound);
+        }
+      }
+
+      // --- Sync Settings UI with State ---
+      function syncSettingsUI() {
+        birthdayInput.value = state.birthday;
+        lifespanInput.value = state.lifespan;
+        darkModeSwitch.checked = state.darkMode;
+
+        // Bar toggle chips
+        const chipButtons = barsToggleGroup.querySelectorAll('.chip-btn');
+        chipButtons.forEach(btn => {
+          const bar = btn.getAttribute('data-bar');
+          if (state.bars[bar]) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+
+        // First day segmented control
+        const segmentButtons = firstDayControl.querySelectorAll('.segment-btn');
+        segmentButtons.forEach(btn => {
+          if (btn.getAttribute('data-day') === state.firstDayOfWeek) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+
+        // Colors
+        ['light', 'dark'].forEach(mode => {
+          const palette = mode === 'light' ? state.colorsLight : state.colorsDark;
+          ['bg', 'bar', 'border', 'text'].forEach(key => {
+            if (colorInputs[mode][key]) {
+              colorInputs[mode][key].value = palette[key];
+            }
+            if (hexLabels[mode][key]) {
+              hexLabels[mode][key].textContent = palette[key];
+            }
+          });
+        });
+      }
+
+      // --- Open / Close Modal ---
+      function openModal() {
+        syncSettingsUI();
+        settingsModal.classList.add('open');
+      }
+
+      function closeModal() {
+        settingsModal.classList.remove('open');
+      }
+
+      // --- Live Event Handlers (Instant updating, no Save required) ---
+
+      // 1. Birthday live update
+      birthdayInput.addEventListener('change', function () {
+        const val = birthdayInput.value.trim();
+        if (isValidDateString(val)) {
+          state.birthday = val;
+          safeSave();
+          updateAllProgress();
+        }
+      });
+
+      // 2. Lifespan live update
+      lifespanInput.addEventListener('input', function () {
+        const val = Number(lifespanInput.value);
+        if (!isNaN(val) && val > 0 && val <= 150) {
+          state.lifespan = Math.round(val);
+          safeSave();
+          updateAllProgress();
+        }
+      });
+
+      // 3. Bars toggle chips
+      barsToggleGroup.addEventListener('click', function (e) {
+        const chip = e.target.closest('.chip-btn');
+        if (!chip) return;
+        const bar = chip.getAttribute('data-bar');
+        state.bars[bar] = !state.bars[bar];
+        if (state.bars[bar]) {
+          chip.classList.add('active');
+        } else {
+          chip.classList.remove('active');
+        }
+        safeSave();
+        applyBarVisibility();
+        updateAllProgress();
+      });
+
+      // 4. First day of week segmented buttons
+      firstDayControl.addEventListener('click', function (e) {
+        const btn = e.target.closest('.segment-btn');
+        if (!btn) return;
+        const day = btn.getAttribute('data-day');
+        state.firstDayOfWeek = day;
+        firstDayControl.querySelectorAll('.segment-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        safeSave();
+        updateAllProgress();
+      });
+
+      // 5. Dark mode switch
+      darkModeSwitch.addEventListener('change', function () {
+        state.darkMode = darkModeSwitch.checked;
+        safeSave();
+        applyTheme();
+      });
+
+      // 6. Color pickers live update
+      ['light', 'dark'].forEach(mode => {
+        const palette = mode === 'light' ? state.colorsLight : state.colorsDark;
+        ['bg', 'bar', 'border', 'text'].forEach(key => {
+          const input = colorInputs[mode][key];
+          const hexLbl = hexLabels[mode][key];
+
+          input.addEventListener('input', function () {
+            palette[key] = input.value;
+            hexLbl.textContent = input.value;
+            safeSave();
+            applyTheme();
+          });
+        });
+      });
+
+      // 7. Reset to defaults
+      resetDefaultsBtn.addEventListener('click', function () {
+        state = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+        safeSave();
+        syncSettingsUI();
+        applyTheme();
+        applyBarVisibility();
+        updateAllProgress();
+      });
+
+      // Open / Close modal events
+      openSettingsBtn.addEventListener('click', openModal);
+      closeSettingsBtn.addEventListener('click', closeModal);
+      doneSettingsBtn.addEventListener('click', closeModal);
+
+      // Close modal on outside backdrop click
+      settingsModal.addEventListener('click', function (e) {
+        if (e.target === settingsModal) {
+          closeModal();
+        }
+      });
+
+      // Close on Escape key
+      window.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && settingsModal.classList.contains('open')) {
+          closeModal();
+        }
+      });
+
+      // Support open settings via query parameter (?settings=open)
+      try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('settings') === 'open') {
+          openModal();
+        }
+      } catch (e) {}
+
+      // --- Initialization ---
+      safeLoad();
+      applyTheme();
+      applyBarVisibility();
+      updateAllProgress();
+
+      // Continuous 1-second interval update for Day/Month/Week/Year/Life
+      setInterval(updateAllProgress, 1000);
+
+    })();
+  </script>
+</body>
+</html>
